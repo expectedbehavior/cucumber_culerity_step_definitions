@@ -59,11 +59,13 @@ end
 
 When /^I (click|press) an image button with class "(.*)"$/ do |bogus, klass|
   $browser.button(:class, /#{Regexp.escape(klass)}/).click
+  $browser.wait
   assert_successful_response
 end
 
 When /^I (click|press) an image button with name "(.*)"$/ do |bogus, name|
   $browser.button(:name, /#{Regexp.escape(name)}/).click
+  $browser.wait
   assert_successful_response
 end
 
@@ -166,17 +168,49 @@ Then /^I should see the page title "(.*)"/ do |page_title|
   assert_equal $browser.title, page_title
 end
 
+def find_any_container(element, *args)
+  element_methods = [:div, :p]
+  element_methods.each do |method|
+#     result = element.send(method, *args)
+    # turns out 'send' isn't exactly like calling a method.  send will hit a private method on a superclass before
+    # hitting method_missing on the object itself, where calling a method normally does the opposite.
+    # in this case :p was calling the print method on Object
+    result = eval("lambda {|*args| element.#{method} *args}").call(*args)
+    return result if result.exists?
+  end
+  nil
+end
+
+def find_next_container(element, *args)
+  if result = find_any_container(element, *args)
+    find_next_container(result, *args)
+  else
+    element
+  end
+end
+
+def find_nearest_container(*args)
+  if element = find_any_container($browser, *args)
+    find_next_container(element, *args)
+  else
+    nil
+  end
+end
+
 Then /^I should see "(.*)"$/ do |text|
   # if we simply check for the browser.html content we don't find content that has been added dynamically, e.g. after an ajax call
   #we are sending this into regex, so any text with regex symbols needs escaping, or it breaks
   esc_text = Regexp.escape(text)
-  div = $browser.div(:text, /#{esc_text}/)
+
+  div = find_nearest_container(:text, /#{esc_text}/)
   begin
     div.html
   rescue
     open_current_html_in_browser_
-    raise("div with '#{text}' not found")
+    raise("element with text '#{text}' not found")
   end
+  
+  assert div.visible?, "element was found, but it wasn't visible"
 end
 
 Then /^I should see an image button with class "(.*)"$/ do |klass|
@@ -217,9 +251,12 @@ Then /I should not see an image link with class "(.*)"/ do |klass|
 end 
 
 Then /I should not see "(.*)"/ do |text|
-  div = $browser.div(:text, /#{text}/).html rescue nil
-  open_current_html_in_browser_ unless div.blank?
-  div.should be_nil
+#   div = $browser.div(:text, /#{text}/)
+  div = find_nearest_container(:text, /#{text}/)
+  result = div.html rescue nil
+  result = nil if result and !div.visible? # trying to conpensate for .div returning hidden things
+  open_current_html_in_browser_ unless result.blank?
+  result.should be_nil
 end
 
 Then /I should not see "(.*)" in class "(.*)"/ do |text, klass|
@@ -353,9 +390,4 @@ end
 Then /^"([^\"]*)" should not be disabled$/ do |label_text|
   field = find_field(label_text)
   field.disabled.should == false
-end
-
-When /^I click the "([^\"]*)" field$/ do |label_text|
-  find_field(label_text).focus
-  find_field(label_text).click
 end
