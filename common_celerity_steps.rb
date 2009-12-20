@@ -1,5 +1,23 @@
 require 'culerity'
 
+Before do
+  $rails_server ||= Culerity::run_rails(:environment => 'culerity_development', :port => 3001)
+  $server ||= Culerity::run_server
+  $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox3,
+    :javascript_exceptions => true,
+    :resynchronize => true,
+    :status_code_exceptions => true
+  }
+  $browser.log_level = :warning
+  @host = 'http://localhost:3001'
+end
+
+at_exit do
+  $browser.exit if $browser
+  $server.close if $server
+  Process.kill(6, $rails_server.pid.to_i) if $rails_server
+end
+
 # Before do
 # #  $server ||= Culerity::run_server
 # #  $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox}
@@ -19,17 +37,17 @@ When /^I go back$/ do
   assert_successful_response
 end
 
-# When /I press "(.*)"/ do |button|
-#   b = $browser.button(:text, button)
-#   begin
-#     b.html
-#     b.click
-#   rescue
-#     open_current_html_in_browser_
-#     raise
-#   end
-#   assert_successful_response
-# end
+When /I press "(.*)"/ do |button|
+  b = $browser.button(:text, button)
+  begin
+    b.html
+    b.click
+  rescue
+    open_current_html_in_browser_
+    raise
+  end
+  assert_successful_response
+end
 
 Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
   $browser.button(:value, button_label).html
@@ -79,14 +97,14 @@ When /^I (click|follow) a link with id "([^\"]*)"$/ do |x, klass|
   assert_successful_response
 end
 
-# When /I fill in "(.*)" with "(.*)"/ do |field, value|
-#   begin
-#     find_field(field).set(value)
-#   rescue
-#     open_current_html_in_browser_
-#     raise
-#   end
-# end
+When /I fill in "(.*)" with "(.*)"/ do |field, value|
+  begin
+    find_field(field).set(value)
+  rescue
+    open_current_html_in_browser_
+    raise
+  end
+end
 
 def find_field(text)
   # look for the straight text, then as a substring, then case-insensative substring
@@ -148,18 +166,18 @@ Then /^I should see the page title "(.*)"/ do |page_title|
   assert_equal $browser.title, page_title
 end
 
-# Then /^I should see "(.*)"$/ do |text|
-#   # if we simply check for the browser.html content we don't find content that has been added dynamically, e.g. after an ajax call
-#   #we are sending this into regex, so any text with regex symbols needs escaping, or it breaks
-#   esc_text = Regexp.escape(text)
-#   div = $browser.div(:text, /#{esc_text}/)
-#   begin
-#     div.html
-#   rescue
-#     open_current_html_in_browser_
-#     raise("div with '#{text}' not found")
-#   end
-# end
+Then /^I should see "(.*)"$/ do |text|
+  # if we simply check for the browser.html content we don't find content that has been added dynamically, e.g. after an ajax call
+  #we are sending this into regex, so any text with regex symbols needs escaping, or it breaks
+  esc_text = Regexp.escape(text)
+  div = $browser.div(:text, /#{esc_text}/)
+  begin
+    div.html
+  rescue
+    open_current_html_in_browser_
+    raise("div with '#{text}' not found")
+  end
+end
 
 Then /^I should see an image button with class "(.*)"$/ do |klass|
   button = $browser.button(:class, /#{Regexp.escape(klass)}/)
