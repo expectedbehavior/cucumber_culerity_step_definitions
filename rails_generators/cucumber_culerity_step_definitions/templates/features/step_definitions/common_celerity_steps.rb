@@ -160,7 +160,7 @@ When /I choose "(.*)"/ do |field|
 end
 
 When /^I (go to|am on|view) ([^\"]+)$/ do |x, path|
-  $browser.goto @host + path_to(path)
+  print_page_on_error { $browser.goto @host + path_to(path) }
   assert_successful_response
 end
 
