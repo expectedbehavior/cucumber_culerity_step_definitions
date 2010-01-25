@@ -395,3 +395,12 @@ Then /^"([^\"]*)" should not be disabled$/ do |label_text|
   field = find_field(label_text)
   field.disabled.should == false
 end
+
+def print_page_on_error(*args, &block)
+  begin
+    yield
+  rescue
+    open_current_html_in_browser_
+    raise
+  end
+end
