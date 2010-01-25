@@ -18,6 +18,10 @@ at_exit do
   Process.kill(6, $rails_server.pid.to_i) if $rails_server
 end
 
+Given /^I am at the "(.*)" host$/ do |hostname|
+  @host = "http://#{hostname}"
+end
+
 # Before do
 # #  $server ||= Culerity::run_server
 # #  $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox}
