@@ -40,7 +40,6 @@ end
 
 def create_object_with_key_value_using_factory(klass, key, value)
   Factory(klass.to_sym, key => value)
-  
 end
 
 def create_object_with_name_using_factory(klass, name)
@@ -52,5 +51,4 @@ Given /^that ([^\"]*) belongs to that ([^\"]*)$/ do |child_klass, parent_klass|
   parent = instance_variable_get "@recent_#{parent_klass.classify.down_under}"
   child.send("#{parent_klass.down_under}=", parent)
   child.save!
-  Factory(klass.to_sym, :name => name )
 end
