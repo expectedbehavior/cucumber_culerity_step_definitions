@@ -1,3 +1,8 @@
+When /^I get that ([^\"]*)$/ do |klass|
+  var_name = klass.downcase.gsub(/\s/,'_')
+  instance_variable_set "@recent_#{var_name}", var_name.classify.constantize.last
+end
+
 Given /^there is (a|an) ([^\"]*)$/ do |bogus, klass|
   var_name = klass.downcase.gsub(/\s/,'_')
   instance_variable_set "@recent_#{var_name}", Factory(var_name.to_sym)
@@ -5,7 +10,7 @@ end
 
 Given /^that ([^\"]*) has "([^\"]*)" set to "([^\"]*)"$/ do |klass, field_, value|
   var_ = instance_variable_get "@recent_#{klass.classify.gsub(/\s/,'_').downcase}"
-  var_.send("#{field_}=", value)
+  var_.send("#{field_.gsub(/\s/,'_').downcase}=", value)
   var_.save!
 end
 

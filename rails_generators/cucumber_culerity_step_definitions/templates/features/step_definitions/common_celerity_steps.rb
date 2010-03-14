@@ -43,14 +43,11 @@ end
 
 When /I press "(.*)"/ do |button|
   b = $browser.button(:text, button)
-  begin
+  print_page_on_error do
     b.html
     b.click
-  rescue
-    open_current_html_in_browser_
-    raise
+    assert_successful_response
   end
-  assert_successful_response
 end
 
 Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
@@ -74,13 +71,10 @@ When /^I (click|press) an image button with name "(.*)"$/ do |bogus, name|
 end
 
 When /^I (click|follow) "(.*)"$/ do |x, link|
-  begin
+  print_page_on_error do
     $browser.link(:text => /#{Regexp.escape(link)}/).click
-  rescue
-    open_current_html_in_browser_
-    raise
+    assert_successful_response
   end
-  assert_successful_response
 end
 
 When /^I (click|follow) "(.*)" (with)in class "(.*)"$/ do |x, link, y, klass|
@@ -88,7 +82,7 @@ When /^I (click|follow) "(.*)" (with)in class "(.*)"$/ do |x, link, y, klass|
   assert_successful_response
 end
 
-When /^I (click|follow) an image link with class "([^\"]*)"$/ do |x, klass|
+When /^I (click|follow) an image link (with|of) class "([^\"]*)"$/ do |x, y, klass|
   print_page_on_error { $browser.link(:class => /#{Regexp.escape(klass)}/).click }
   assert_successful_response
 end
@@ -104,12 +98,7 @@ When /^I (click|follow) a link with id "([^\"]*)"$/ do |x, klass|
 end
 
 When /I fill in "(.*)" with "(.*)"/ do |field, value|
-  begin
-    find_field(field).set(value)
-  rescue
-    open_current_html_in_browser_
-    raise
-  end
+  print_page_on_error { find_field(field).set(value) }
 end
 
 def find_field(text)
@@ -172,15 +161,19 @@ Then /^I should see the page title "(.*)"/ do |page_title|
   assert_equal $browser.title, page_title
 end
 
+def elements_equal?(e1, e2)
+  e1.xpath == e2.xpath rescue nil
+end
+
 def find_any_container(element, *args)
-  element_methods = [:div, :p]
+  element_methods = [:div, :p, :h1, :h2, :cell, :row]
   element_methods.each do |method|
 #     result = element.send(method, *args)
     # turns out 'send' isn't exactly like calling a method.  send will hit a private method on a superclass before
     # hitting method_missing on the object itself, where calling a method normally does the opposite.
     # in this case :p was calling the print method on Object
-    result = eval("lambda {|*args| element.#{method} *args}").call(*args)
-    return result if result.exists?
+    result = eval("element.#{method} *args")
+    return result if result.exists? && !elements_equal?(result, element)
   end
   nil
 end
@@ -201,20 +194,22 @@ def find_nearest_container(*args)
   end
 end
 
-Then /^I should see "(.*)"$/ do |text|
+def find_text(text)
   # if we simply check for the browser.html content we don't find content that has been added dynamically, e.g. after an ajax call
   #we are sending this into regex, so any text with regex symbols needs escaping, or it breaks
   esc_text = Regexp.escape(text)
+  
+  $browser.wait
 
   div = find_nearest_container(:text, /#{esc_text}/)
-  begin
-    div.html
-  rescue
-    open_current_html_in_browser_
-    raise("element with text '#{text}' not found")
-  end
-  
+  div.html rescue raise("element with text '#{text}' not found")
   assert div.visible?, "element was found, but it wasn't visible"
+end
+
+Then /^I should see "(.*)"$/ do |text|
+  print_page_on_error do
+    find_text text
+  end
 end
 
 Then /^I should see an image button with class "(.*)"$/ do |klass|
@@ -227,35 +222,32 @@ Then /^I should see an image button with class "(.*)"$/ do |klass|
   end
 end
 
-Then /I should see an image link with class "(.*)"/ do |klass|
+def find_image_link_of_class(klass)
   esc_klass = Regexp.escape(klass)
   link = $browser.link(:class, /#{esc_klass}/)
-  begin
-    link.html
-  rescue
-    open_current_html_in_browser_
-    raise("link with '#{klass}' not found")
+end
+
+Then /I should see an image link (with|of) class "(.*)"/ do |x, klass|
+  print_page_on_error do
+    find_image_link_of_class(klass).html
   end  
 end 
 
-Then /I should not see an image link with class "(.*)"/ do |klass|
-  esc_klass = Regexp.escape(klass)
-  link = $browser.link(:class, /#{esc_klass}/)
-  found = false
-  begin
-    link.html
-    found = true
-  rescue
-  end
-  
-  if found
-    open_current_html_in_browser_
-    raise("link with '#{klass}' found")
+Then /I should not see an image link (with|of) class "(.*)"/ do |x, klass|
+  print_page_on_error do
+    raise "image link with class '#{klass}' found" if find_image_link_of_class(klass).exists?
   end
 end 
 
+Then /I should see an image (with|of) class "(.*)"/ do |x, klass|
+  esc_klass = Regexp.escape(klass)
+  print_page_on_error do
+    $browser.image(:class, /#{esc_klass}/).html
+  end  
+end 
+
 Then /I should not see "(.*)"/ do |text|
-#   div = $browser.div(:text, /#{text}/)
+  $browser.wait
   div = find_nearest_container(:text, /#{text}/)
   result = div.html rescue nil
   result = nil if result and !div.visible? # trying to conpensate for .div returning hidden things
@@ -327,12 +319,22 @@ def assert_successful_response
 end
 
 def open_current_html_in_browser_
-  dir = "#{RAILS_ROOT}/log/culerity_page_errors"
+  dir = "#{RAILS_ROOT}/public/culerity_page_errors"
   FileUtils.mkdir_p dir
-  File.open("#{dir}/#{Time.now.to_f.to_s}.html", "w") do |tmp|
+  path = "#{dir}/#{Time.now.to_f.to_s}.html"
+  File.open(path, "w") do |tmp|
     tmp << $browser.xml
-    #`open -a /Applications/Safari.app #{tmp.path}`
-    puts "Path to error html: file://#{tmp.path}"
+  end
+  FileUtils.cp path, "#{dir}/latest.html"
+  path
+end
+
+def print_page_on_error(*args, &block)
+  begin
+    yield
+  rescue Exception => e
+    path = open_current_html_in_browser_.gsub("#{RAILS_ROOT}/public", '')
+    raise e.exception(e.message + "\nPath to error html: #{@host}#{path}")
   end
 end
 
@@ -344,13 +346,21 @@ When /^delayed job runs$/ do
 end
 
 Then /^"([^\"]*)" comes before "([^\"]*)"$/ do |text_1, text_2|
-  begin
+  print_page_on_error do
     $browser.wait # let javascript finish modifying the page if it is
     $browser.row(:xpath => "//tr[contains(.//*,'#{text_1}')]/following-sibling::*[contains(.//*, '#{text_2}')]").html
     assert_nil $browser.row(:xpath => "//tr[contains(.//*,'#{text_2}')]/following-sibling::*[contains(.//*, '#{text_1}')]").html rescue nil
-  rescue
-    open_current_html_in_browser_
-    raise
+  end
+end
+
+Then /^"([^\"]*)" comes before "([^\"]*)" in "([^\"]*)"$/ do |text_1, text_2, container_id|
+  esc_1 = Regexp.escape(text_1)
+  esc_2 = Regexp.escape(text_2)
+  print_page_on_error do
+    $browser.wait # let javascript finish modifying the page if it is
+    container_html = find_nearest_container(:id, container_id).html
+    assert_match /#{esc_1}.*#{esc_2}/m, container_html
+    assert_no_match /#{esc_2}.*#{esc_1}/m, container_html
   end
 end
 
@@ -396,11 +406,6 @@ Then /^"([^\"]*)" should not be disabled$/ do |label_text|
   field.disabled.should == false
 end
 
-def print_page_on_error(*args, &block)
-  begin
-    yield
-  rescue
-    open_current_html_in_browser_
-    raise
-  end
+Then /^I should see an image of "([^\"]*)"$/ do |src|
+  $browser.image(:src, /#{Regexp.escape(src)}/)
 end
