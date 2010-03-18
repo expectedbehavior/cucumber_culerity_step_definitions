@@ -3,20 +3,13 @@ require 'culerity'
 Before do
   $rails_server_pid ||= Culerity::run_rails(:environment => 'culerity', :port => 3001)
   $server ||= Culerity::run_server
-  unless $browser
-    $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox3,
-      :javascript_exceptions => true,
-      :resynchronize => true,
-      :status_code_exceptions => true
-    }
-    $browser.log_level = :warning
-  end
+  $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox3,
+    :javascript_exceptions => true,
+    :resynchronize => true,
+    :status_code_exceptions => true
+  }
+  $browser.log_level = :off
   @host = 'http://localhost:3001'
-end
-
-After do
-  $server.clear_proxies
-  $browser.clear_cookies
 end
 
 at_exit do
@@ -27,6 +20,15 @@ end
 
 Given /^I am at the "(.*)" host$/ do |hostname|
   @host = "http://#{hostname}"
+end
+
+Then /I should be at "(.*)"$/ do |hostname|  
+  begin
+    assert_match /#{hostname}/i, $browser.url
+  rescue
+    open_current_html_in_browser_
+    raise
+  end
 end
 
 # Before do
@@ -48,7 +50,7 @@ When /^I go back$/ do
   assert_successful_response
 end
 
-When /I press "(.*)"/ do |button|
+When /^I press "(.*)"$/ do |button|
   b = $browser.button(:text, button)
   print_page_on_error do
     b.html
@@ -62,7 +64,11 @@ Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
 end
 
 Then /^I should see a link labelled "([^\"]*)"$/ do |link_label|
-  $browser.link(:text, link_label).html
+  print_page_on_error { $browser.link(:text, link_label).html }
+end
+
+Then /^I should not see a link labelled "([^\"]*)"$/ do |text|
+  assert ! $browser.link(:text, text).exists?, "incorrectly found a link with text #{text}}"
 end
 
 When /^I (click|press) an image button with class "(.*)"$/ do |bogus, klass|
@@ -140,7 +146,14 @@ When /I check "(.*)"/ do |field|
 end
 
 Then /I should see a "(.*)" labelled "(.*)"/ do |field_type, label_text|
-  print_page_on_error { $browser.send(field_type, :id, find_label(label_text).for).set }
+  print_page_on_error do
+    begin
+      assert $browser.send(field_type, :id, find_label(label_text).for)
+    rescue
+      puts "Couldn't find '#{field_type}' labelled '#{label_text}'"
+      raise
+    end
+  end
 end
 
 When /^I uncheck "(.*)"$/ do |field|
@@ -148,7 +161,32 @@ When /^I uncheck "(.*)"$/ do |field|
 end
 
 When /I select "(.*)" from "(.*)"/ do |value, field|
-  $browser.select_list(:id, find_label(field).for).select value
+  print_page_on_error do
+    select_list = find_field(field)
+    if select_list.exists? && select_list.visible?
+      select_list.select value
+    else
+      select_from_custom_select_list(value, field)
+    end
+  end
+end
+
+def select_from_custom_select_list(value, field)
+  label          = find_label(field)
+  new_div_id     = "new_#{label.for}"
+  div            = $browser.div(:id => new_div_id)
+
+  div.div(:class => "down_arrow").click
+  
+  list_container = div.ul(:class => "new_list")  
+  item           = list_container.link(:text => value)
+  assert list_container.visible?, "clicking on the custom combobox didn't appear to make the items appear"
+  assert item.exists?,            "could not find entry in custom combobox with text '#{value}'"
+  assert item.visible?,           "the entry with text '#{value}' did not become visible"
+
+  item.click
+  assert div.div(:class => "selected_text").text == value, "the selection didn't take"
+  assert ! list_container.visible?,                        "the custom combobox list did not disappear"
 end
 
 When /I choose "(.*)"/ do |field|
@@ -165,7 +203,7 @@ When /I wait for the AJAX call to finish/ do
 end
 
 Then /^I should see the page title "(.*)"/ do |page_title|
-  assert_equal $browser.title, page_title
+  print_page_on_error { assert_equal $browser.title, page_title }
 end
 
 def elements_equal?(e1, e2)
@@ -208,15 +246,15 @@ def find_text(text)
   
   $browser.wait
 
-  div = find_nearest_container(:text, /#{esc_text}/)
-  div.html rescue raise("element with text '#{text}' not found")
-  assert div.visible?, "element was found, but it wasn't visible"
+  print_page_on_error do
+    div = find_nearest_container(:text, /#{esc_text}/)
+    div.html rescue raise("element with text '#{text}' not found")
+    assert div.visible?, "element was found, but it wasn't visible"
+  end
 end
 
 Then /^I should see "(.*)"$/ do |text|
-  print_page_on_error do
-    find_text text
-  end
+  find_text text
 end
 
 Then /^I should see an image button with class "(.*)"$/ do |klass|
@@ -325,6 +363,10 @@ def assert_successful_response
   end
 end
 
+When /^the current html is logged$/ do
+  open_current_html_in_browser_
+end
+
 def open_current_html_in_browser_
   dir = "#{RAILS_ROOT}/public/culerity_page_errors"
   FileUtils.mkdir_p dir
@@ -346,6 +388,7 @@ def print_page_on_error(*args, &block)
 end
 
 When /^delayed job runs$/ do
+#   result = Delayed::Worker.new.work_off
   result = Delayed::Job.work_off
   assert result.sum > 0, "no jobs were in the queue"
   assert result[0] > 0, "no jobs succeeded"
@@ -415,4 +458,13 @@ end
 
 Then /^I should see an image of "([^\"]*)"$/ do |src|
   $browser.image(:src, /#{Regexp.escape(src)}/)
+end
+
+#separate with commas
+Then /^I should see each of "([^\"]*)"$/ do |text|
+  CSV.parse_line(text).each{|x| Then %Q{I should see "#{x.strip}"}}
+end
+
+When /^I clear all the cookies$/ do
+  $browser.clear_cookies
 end
