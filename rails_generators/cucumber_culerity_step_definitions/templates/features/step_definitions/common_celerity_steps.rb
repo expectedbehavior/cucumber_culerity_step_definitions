@@ -23,11 +23,8 @@ Given /^I am at the "(.*)" host$/ do |hostname|
 end
 
 Then /I should be at "(.*)"$/ do |hostname|  
-  begin
+  print_page_on_error do
     assert_match /#{hostname}/i, $browser.url
-  rescue
-    open_current_html_in_browser_
-    raise
   end
 end
 
@@ -63,6 +60,10 @@ Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
   $browser.button(:value, button_label).html
 end
 
+Then /^I should not see a button labelled "([^\"]*)"$/ do |text|
+  assert ! $browser.button(:value, text).exists?, "incorrectly found a button with text #{text}}"
+end
+
 Then /^I should see a link labelled "([^\"]*)"$/ do |link_label|
   print_page_on_error { $browser.link(:text, link_label).html }
 end
@@ -77,22 +78,24 @@ When /^I (click|press) an image button with class "(.*)"$/ do |bogus, klass|
   assert_successful_response
 end
 
-When /^I (click|press) an image button with name "(.*)"$/ do |bogus, name|
+When /^I (click|press) an image button with name "([^\"]*)"$/ do |bogus, name|
   $browser.button(:name, /#{Regexp.escape(name)}/).click
   $browser.wait
   assert_successful_response
 end
 
-When /^I (click|follow) "(.*)"$/ do |x, link|
+When /^I (click|follow) "([^\"]*)"$/ do |x, link|
   print_page_on_error do
     $browser.link(:text => /#{Regexp.escape(link)}/).click
     assert_successful_response
   end
 end
 
-When /^I (click|follow) "(.*)" (with)in class "(.*)"$/ do |x, link, y, klass|
-  $browser.div(:class => /#{Regexp.escape(klass)}/).link(:text => /#{Regexp.escape(link)}/).click
-  assert_successful_response
+When /^I (click|follow) "([^\"]*)" (with)?in class "([^\"]*)"$/ do |x, link, y, klass|
+  print_page_on_error do
+    $browser.div(:class => /#{Regexp.escape(klass)}/).link(:text => /#{Regexp.escape(link)}/).click
+    assert_successful_response
+  end
 end
 
 When /^I (click|follow) an image link (with|of) class "([^\"]*)"$/ do |x, y, klass|
@@ -101,13 +104,17 @@ When /^I (click|follow) an image link (with|of) class "([^\"]*)"$/ do |x, y, kla
 end
 
 When /^I (click|follow) a link with class "([^\"]*)"$/ do |x, klass|
-  $browser.link(:class => /#{Regexp.escape(klass)}/).click
-  assert_successful_response
+  print_page_on_error do
+    $browser.link(:class => /#{Regexp.escape(klass)}/).click
+    assert_successful_response
+  end
 end
 
 When /^I (click|follow) a link with id "([^\"]*)"$/ do |x, klass|
-  $browser.link(:id => /#{Regexp.escape(klass)}/).click
-  assert_successful_response
+  print_page_on_error do
+    $browser.link(:id => /#{Regexp.escape(klass)}/).click
+    assert_successful_response
+  end
 end
 
 When /I fill in "(.*)" with "(.*)"/ do |field, value|
@@ -145,7 +152,7 @@ When /I check "(.*)"/ do |field|
   $browser.check_box(:id, find_label(field).for).set(true)
 end
 
-Then /I should see a "(.*)" labelled "(.*)"/ do |field_type, label_text|
+Then /I should see a "([^\"]*)" labelled "([^\"]*)"/ do |field_type, label_text|
   print_page_on_error do
     begin
       assert $browser.send(field_type, :id, find_label(label_text).for)
@@ -172,6 +179,7 @@ When /I select "(.*)" from "(.*)"/ do |value, field|
 end
 
 def select_from_custom_select_list(value, field)
+  $browser.wait
   label          = find_label(field)
   new_div_id     = "new_#{label.for}"
   div            = $browser.div(:id => new_div_id)
@@ -180,17 +188,24 @@ def select_from_custom_select_list(value, field)
   
   list_container = div.ul(:class => "new_list")  
   item           = list_container.link(:text => value)
+#   item           = list_container.link(:text => /#{Regexp.escape(value)}/)
+#   puts ">#{item.html}<"
   assert list_container.visible?, "clicking on the custom combobox didn't appear to make the items appear"
   assert item.exists?,            "could not find entry in custom combobox with text '#{value}'"
   assert item.visible?,           "the entry with text '#{value}' did not become visible"
 
   item.click
+  $browser.wait
   assert div.div(:class => "selected_text").text == value, "the selection didn't take"
   assert ! list_container.visible?,                        "the custom combobox list did not disappear"
 end
 
 When /I choose "(.*)"/ do |field|
   $browser.radio(:id, (find_label(field).for rescue field)).set(true)
+end
+
+When /^I go to the specific page "([^\"]+)"$/ do |host_and_path|
+  print_page_on_error { $browser.goto host_and_path }
 end
 
 When /^I (go to|am on|view) ([^\"]+)$/ do |x, path|
@@ -202,8 +217,8 @@ When /I wait for the AJAX call to finish/ do
   $browser.wait
 end
 
-Then /^I should see the page title "(.*)"/ do |page_title|
-  print_page_on_error { assert_equal $browser.title, page_title }
+Then /^I should see the page title "([^\"]*)"/ do |page_title|
+  print_page_on_error { assert_equal page_title, $browser.title }
 end
 
 def elements_equal?(e1, e2)
@@ -211,7 +226,7 @@ def elements_equal?(e1, e2)
 end
 
 def find_any_container(element, *args)
-  element_methods = [:div, :p, :h1, :h2, :cell, :row]
+  element_methods = [:div, :p, :h1, :h2, :h5, :cell, :row, :li]
   element_methods.each do |method|
 #     result = element.send(method, *args)
     # turns out 'send' isn't exactly like calling a method.  send will hit a private method on a superclass before
@@ -253,11 +268,11 @@ def find_text(text)
   end
 end
 
-Then /^I should see "(.*)"$/ do |text|
+Then /^I should see "([^\"]*)"$/ do |text|
   find_text text
 end
 
-Then /^I should see an image button with class "(.*)"$/ do |klass|
+Then /^I should see an image button with class "([^\"]*)"$/ do |klass|
   button = $browser.button(:class, /#{Regexp.escape(klass)}/)
   begin
     button.html
@@ -272,61 +287,62 @@ def find_image_link_of_class(klass)
   link = $browser.link(:class, /#{esc_klass}/)
 end
 
-Then /I should see an image link (with|of) class "(.*)"/ do |x, klass|
+Then /I should see an image link (with|of) class "([^\"]*)"/ do |x, klass|
   print_page_on_error do
     find_image_link_of_class(klass).html
   end  
 end 
 
-Then /I should not see an image link (with|of) class "(.*)"/ do |x, klass|
+Then /I should not see an image link (with|of) class "([^\"]*)"/ do |x, klass|
   print_page_on_error do
     raise "image link with class '#{klass}' found" if find_image_link_of_class(klass).exists?
   end
 end 
 
-Then /I should see an image (with|of) class "(.*)"/ do |x, klass|
+Then /I should see an image (with|of) class "([^\"]*)"/ do |x, klass|
   esc_klass = Regexp.escape(klass)
   print_page_on_error do
     $browser.image(:class, /#{esc_klass}/).html
   end  
-end 
+end
 
-Then /I should not see "(.*)"/ do |text|
+def dont_find(*args)
   $browser.wait
-  div = find_nearest_container(:text, /#{text}/)
+  div = find_nearest_container(*args)
   result = div.html rescue nil
   result = nil if result and !div.visible? # trying to conpensate for .div returning hidden things
   open_current_html_in_browser_ unless result.blank?
   result.should be_nil
 end
 
-Then /I should not see "(.*)" in class "(.*)"/ do |text, klass|
-  div = $browser.div(:text => /#{text}/, :class => klass).html rescue nil
-  open_current_html_in_browser_ unless div.blank?
-  div.should be_nil
+Then /^I should not see "([^\"]*)"$/ do |text|
+  dont_find(:text, /#{text}/)
 end
 
-Then /I should see "(.*)" (with)?in class "(.*)"/ do |text, bogus, klass|
-  # if we simply check for the browser.html content we don't find content that has been added dynamically, e.g. after an ajax call
-  #we are sending this into regex, so any text with regex symbols needs escaping, or it breaks
+Then /^the page should not match "([^\"]*)"$/ do |text|
+  print_page_on_error do
+    assert_no_match /#{Regexp.escape(text)}/, $browser.xml
+  end
+end
+
+Then /I should not see "([^\"]*)" in class "([^\"]*)"/ do |text, klass|
+  dont_find(:text => /#{text}/, :class => klass)
+end
+
+Then /I should see "([^\"]*)" (with)?in class "([^\"]*)"/ do |text, bogus, klass|
   esc_text = Regexp.escape(text)
-  div = $browser.div(:text, /#{esc_text}/)
-  begin
-    div.html
-  rescue
-    open_current_html_in_browser_
-    raise("div with '#{text}' not found")
+  print_page_on_error do
+    div = find_nearest_container(:text => /#{esc_text}/, :class => /#{klass}/)
+    div.html rescue raise("element with text '#{text}' not found")
+    assert div.visible?, "element was found, but it wasn't visible"
   end
 end
 
 Then /^I fill in the selected date for "([^"]*)" with "([^"]*)"$/ do |label_text, date|
-  begin
+  print_page_on_error do
     base_id = find_label(label_text).for
     date_obj = Date.parse(date)
     fill_in_date_fields(base_id, date_obj)
-  rescue
-    open_current_html_in_browser_
-    raise
   end
 end
 
@@ -388,8 +404,11 @@ def print_page_on_error(*args, &block)
 end
 
 When /^delayed job runs$/ do
-#   result = Delayed::Worker.new.work_off
-  result = Delayed::Job.work_off
+  result = if Delayed.const_defined?("Worker") and Delayed::Worker.new.respond_to?(:work_off)
+    Delayed::Worker.new.work_off
+  else
+    Delayed::Job.work_off
+  end
   assert result.sum > 0, "no jobs were in the queue"
   assert result[0] > 0, "no jobs succeeded"
   assert result[1] == 0, "some jobs failed"
@@ -467,4 +486,13 @@ end
 
 When /^I clear all the cookies$/ do
   $browser.clear_cookies
+end
+
+
+When /^I fill in "([^\"]*)" with a week from now$/ do |label_text|
+  When "I fill in \"#{label_text}\" with \"#{1.week.from_now.strftime "%Y-%m-%d"}\""
+end
+
+When /^I fill in "([^\"]*)" with today$/ do |label_text|
+  When "I fill in \"#{label_text}\" with \"#{Date.today.strftime "%Y-%m-%d"}\""
 end
