@@ -148,8 +148,14 @@ Then /^I should see "([^\"]*)" with a "([^\"]*)" field$/ do |label_name, field_t
   assert_match field_type, find_field(label_name).attribute_value(:type)
 end
 
-When /I check "(.*)"/ do |field|
+When /I check "([^\"]*)"/ do |field|
   $browser.check_box(:id, find_label(field).for).set(true)
+end
+
+Then /"([^\"]*)" should be checked/ do |field|
+  print_page_on_error do
+    assert $browser.check_box(:id, find_label(field).for).set?, "#{field} wasn't checked"
+  end
 end
 
 Then /I should see a "([^\"]*)" labelled "([^\"]*)"/ do |field_type, label_text|
