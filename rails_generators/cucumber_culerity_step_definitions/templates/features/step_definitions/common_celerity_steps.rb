@@ -9,6 +9,7 @@ Before do
     :status_code_exceptions => true
   }
   $browser.log_level = :off
+#   $browser.css = true # font-face seems to screw this up, this also means hover applies so things that were visible may be hidden and I don't know how to trigger the hover yet
   @host = 'http://localhost:3001'
 end
 
@@ -27,6 +28,15 @@ Then /I should be at "(.*)"$/ do |hostname|
     assert_match /#{hostname}/i, $browser.url
   end
 end
+
+# this doesn't work, though we should figure it out so we can turn on css and deal with :hover
+# When /^I hover over "([^\"]*)"$/ do |text|
+#   print_page_on_error do
+#     esc_text = Regexp.escape(text)
+#     elem = find_nearest_container(:text, /#{esc_text}/)
+#     elem.fire_event("mouseover")
+#   end
+# end
 
 # Before do
 # #  $server ||= Culerity::run_server
@@ -47,7 +57,7 @@ When /^I go back$/ do
   assert_successful_response
 end
 
-When /^I press "(.*)"$/ do |button|
+When /^I press "([^\"]*)"$/ do |button|
   b = $browser.button(:text, button)
   print_page_on_error do
     b.html
@@ -64,7 +74,7 @@ Then /^I should not see a button labelled "([^\"]*)"$/ do |text|
   assert ! $browser.button(:value, text).exists?, "incorrectly found a button with text #{text}}"
 end
 
-Then /^I should see a link labelled "([^\"]*)"$/ do |link_label|
+Then /^I should see a link (with text|labelled) "([^\"]*)"$/ do |bogus, link_label|
   print_page_on_error { $browser.link(:text, link_label).html }
 end
 
@@ -73,15 +83,19 @@ Then /^I should not see a link labelled "([^\"]*)"$/ do |text|
 end
 
 When /^I (click|press) an image button with class "(.*)"$/ do |bogus, klass|
-  $browser.button(:class, /#{Regexp.escape(klass)}/).click
-  $browser.wait
-  assert_successful_response
+  print_page_on_error do
+    $browser.button(:class, /#{Regexp.escape(klass)}/).click
+    $browser.wait
+    assert_successful_response
+  end
 end
 
 When /^I (click|press) an image button with name "([^\"]*)"$/ do |bogus, name|
-  $browser.button(:name, /#{Regexp.escape(name)}/).click
-  $browser.wait
-  assert_successful_response
+  print_page_on_error do
+    $browser.button(:name, /#{Regexp.escape(name)}/).click
+    $browser.wait
+    assert_successful_response
+  end
 end
 
 When /^I (click|follow) "([^\"]*)"$/ do |x, link|
@@ -211,15 +225,25 @@ When /I choose "(.*)"/ do |field|
 end
 
 When /^I go to the specific page "([^\"]+)"$/ do |host_and_path|
-  print_page_on_error { $browser.goto host_and_path }
+  print_page_on_error { visit host_and_path }
+end
+
+def visit(host_and_path)
+  $browser.goto host_and_path
+  # this might fix any issues with behaviors being attached to elements
+#   $browser.wait
 end
 
 When /^I (go to|am on|view) ([^\"]+)$/ do |x, path|
-  print_page_on_error { $browser.goto @host + path_to(path) }
+  print_page_on_error { visit @host + path_to(path) }
   assert_successful_response
 end
 
 When /I wait for the AJAX call to finish/ do
+  $browser.wait
+end
+
+When /I wait for the JS to load/ do
   $browser.wait
 end
 
@@ -338,7 +362,7 @@ end
 Then /I should see "([^\"]*)" (with)?in class "([^\"]*)"/ do |text, bogus, klass|
   esc_text = Regexp.escape(text)
   print_page_on_error do
-    div = find_nearest_container(:text => /#{esc_text}/, :class => /#{klass}/)
+    div = find_nearest_container(:text => /#{esc_text}/, :class => /\b#{klass}\b/)
     div.html rescue raise("element with text '#{text}' not found")
     assert div.visible?, "element was found, but it wasn't visible"
   end
@@ -377,7 +401,7 @@ def assert_successful_response
   if(status == 302 || status == 301)
     location = $browser.page.web_response.get_response_header_value('Location')
     puts "Being redirected to #{location}"
-    $browser.goto location
+    visit location
     assert_successful_response
   elsif status != 200
     open_current_html_in_browser_
@@ -386,7 +410,8 @@ def assert_successful_response
 end
 
 When /^the current html is logged$/ do
-  open_current_html_in_browser_
+  path = open_current_html_in_browser_.gsub("#{RAILS_ROOT}/public", '')
+  puts "#{@host}#{path}"
 end
 
 def open_current_html_in_browser_
@@ -494,11 +519,21 @@ When /^I clear all the cookies$/ do
   $browser.clear_cookies
 end
 
-
 When /^I fill in "([^\"]*)" with a week from now$/ do |label_text|
   When "I fill in \"#{label_text}\" with \"#{1.week.from_now.strftime "%Y-%m-%d"}\""
 end
 
 When /^I fill in "([^\"]*)" with today$/ do |label_text|
   When "I fill in \"#{label_text}\" with \"#{Date.today.strftime "%Y-%m-%d"}\""
+end
+
+When /^I wait 1\/2s$/ do
+  sleep 0.5
+end
+
+Then /^inside that div I should see a link with text "([^\"]*)" and class "([^\"]*)" and title "([^\"]*)"$/ do |link_text, link_class, link_title|
+  print_page_on_error do
+    link = $browser.link(:text => link_text, :class => /\b#{Regexp.escape link_class }\b/, :title => link_title)
+    assert link.exists?
+  end
 end
