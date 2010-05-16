@@ -1,7 +1,8 @@
 require 'culerity'
 
 Before do
-  $rails_server_pid ||= Culerity::run_rails(:environment => 'culerity', :port => 3001)
+  $port = 3001
+  $rails_server_pid ||= Culerity::run_rails(:environment => 'culerity', :port => $port)
   $server ||= Culerity::run_server
   $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox3,
     :javascript_exceptions => true,
@@ -10,7 +11,7 @@ Before do
   }
   $browser.log_level = :off
 #   $browser.css = true # font-face seems to screw this up, this also means hover applies so things that were visible may be hidden and I don't know how to trigger the hover yet
-  @host = 'http://localhost:3001'
+  @host = 'http://localhost:#{$port}'
 end
 
 at_exit do
