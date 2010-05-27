@@ -1,7 +1,7 @@
 require 'culerity'
 
 Before do
-  $port = 3001
+  $port ||= 3001 # can setup app specific port in support/env.rb
   $rails_server_pid ||= Culerity::run_rails(:environment => 'culerity', :port => $port)
   $server ||= Culerity::run_server
   $browser = Culerity::RemoteBrowserProxy.new $server, {:browser => :firefox3,
@@ -72,7 +72,9 @@ Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
 end
 
 Then /^I should not see a button labelled "([^\"]*)"$/ do |text|
-  assert ! $browser.button(:value, text).exists?, "incorrectly found a button with text #{text}}"
+  print_page_on_error do
+    assert ! $browser.button(:value, text).exists?, "incorrectly found a button with text #{text}"
+  end
 end
 
 Then /^I should see a link (with text|labelled) "([^\"]*)"$/ do |bogus, link_label|
@@ -80,7 +82,9 @@ Then /^I should see a link (with text|labelled) "([^\"]*)"$/ do |bogus, link_lab
 end
 
 Then /^I should not see a link labelled "([^\"]*)"$/ do |text|
-  assert ! $browser.link(:text, text).exists?, "incorrectly found a link with text #{text}}"
+  print_page_on_error do
+    assert ! $browser.link(:text, text).exists?, "incorrectly found a link with text #{text}"
+  end
 end
 
 When /^I (click|press) an image button with class "(.*)"$/ do |bogus, klass|
@@ -106,9 +110,9 @@ When /^I (click|follow) "([^\"]*)"$/ do |x, link|
   end
 end
 
-When /^I (click|follow) "([^\"]*)" (with)?in class "([^\"]*)"$/ do |x, link, y, klass|
+When /^I (click|follow) "([^\"]*)" (with)?in (class|id) "([^\"]*)"$/ do |x, link, y, attr, klass|
   print_page_on_error do
-    $browser.div(:class => /#{Regexp.escape(klass)}/).link(:text => /#{Regexp.escape(link)}/).click
+    $browser.div(attr.to_sym => /\b#{Regexp.escape(klass)}\b/).link(:text => /#{Regexp.escape(link)}/).click
     assert_successful_response
   end
 end
@@ -356,14 +360,15 @@ Then /^the page should not match "([^\"]*)"$/ do |text|
   end
 end
 
-Then /I should not see "([^\"]*)" in class "([^\"]*)"/ do |text, klass|
-  dont_find(:text => /#{text}/, :class => klass)
+Then /I should not see "([^\"]*)" in (class|id) "([^\"]*)"/ do |text, attr, klass|
+  esc_text = Regexp.escape(text)
+  dont_find(:text => /#{esc_text}/, attr => /\b#{klass}\b/)
 end
 
-Then /I should see "([^\"]*)" (with)?in class "([^\"]*)"/ do |text, bogus, klass|
+Then /I should see "([^\"]*)" (with)?in (class|id) "([^\"]*)"/ do |text, bogus, attr, klass|
   esc_text = Regexp.escape(text)
   print_page_on_error do
-    div = find_nearest_container(:text => /#{esc_text}/, :class => /\b#{klass}\b/)
+    div = find_nearest_container(:text => /#{esc_text}/, attr => /\b#{klass}\b/)
     div.html rescue raise("element with text '#{text}' not found")
     assert div.visible?, "element was found, but it wasn't visible"
   end
@@ -441,9 +446,13 @@ When /^delayed job runs$/ do
   else
     Delayed::Job.work_off
   end
-  assert result.sum > 0, "no jobs were in the queue"
-  assert result[0] > 0, "no jobs succeeded"
-  assert result[1] == 0, "some jobs failed"
+  begin
+    assert result.sum > 0, "no jobs were in the queue"
+    assert result[0] > 0, "no jobs succeeded"
+    assert result[1] == 0, "some jobs failed"
+  rescue Exception => e
+    raise e.exception(e.message + "\nDelayed job failures:\n#{Delayed::Job.all.map(:last_error).join("\n")}")
+  end
 end
 
 Then /^"([^\"]*)" comes before "([^\"]*)"$/ do |text_1, text_2|
@@ -526,6 +535,14 @@ end
 
 When /^I fill in "([^\"]*)" with today$/ do |label_text|
   When "I fill in \"#{label_text}\" with \"#{Date.today.strftime "%Y-%m-%d"}\""
+end
+
+Then /^I should see today's date$/ do
+  Then "I should see \"#{Date.today.strftime "%Y-%m-%d"}\""
+end
+
+Then /^I should see a week from now's date$/ do
+  Then "I should see \"#{1.week.from_now.strftime "%Y-%m-%d"}\""
 end
 
 When /^I wait 1\/2s$/ do
