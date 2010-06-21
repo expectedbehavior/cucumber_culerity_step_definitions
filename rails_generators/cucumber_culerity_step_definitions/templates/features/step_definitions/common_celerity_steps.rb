@@ -11,7 +11,7 @@ Before do
   }
   $browser.log_level = :off
 #   $browser.css = true # font-face seems to screw this up, this also means hover applies so things that were visible may be hidden and I don't know how to trigger the hover yet
-  @host = 'http://localhost:#{$port}'
+  @host = "http://localhost:#{$port}"
 end
 
 at_exit do
