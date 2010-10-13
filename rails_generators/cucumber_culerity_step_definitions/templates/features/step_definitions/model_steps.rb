@@ -14,6 +14,13 @@ Given /^that ([^\"]*) has "([^\"]*)" set to "([^\"]*)"$/ do |klass, field_, valu
   var_.save!
 end
 
+Given /^that ([^\"]*) has "([^\"]*)" set to that ([^\"]*)$/ do |klass, field_, other_klass|
+  var_ = instance_variable_get "@recent_#{klass.classify.down_under}"
+  other_var_ = instance_variable_get "@recent_#{other_klass.classify.down_under}"
+  var_.send("#{field_.down_under}=", other_var_)
+  var_.save!
+end
+
 Given /^that ([^\"]*) is reloaded$/ do |klass|
   var_ = instance_variable_get "@recent_#{klass.classify.down_under}"
   var_.reload
@@ -73,6 +80,13 @@ Given /^that ([^\"]*) belongs to that ([^\"]*)$/ do |child_klass, parent_klass|
   child.save!
 end
 
+When /^a ([^\"]*) named "([^\"]*)" (gets|is) destroyed$/ do |klass, name, x|
+  print_page_on_error do
+    var_ = Object.const_get(klass.classify).find_by_name(name)
+    var_.destroy
+  end
+end
+
 When /^I get the last ([^\"]*)$/ do |klass_name|
   var_name = klass_name.down_under
   instance_variable_set "@recent_#{var_name}", var_name.classify.constantize.last
@@ -103,10 +117,10 @@ def check_variable_field_klass_value(field_, klass, value)
   value = value == "true" if ["true", "false"].include? value
   # "200" gets parsed as a date when I don't want it to be
   if(value.size >= 8 && Date.parse(value) rescue nil)
-    value = Date.parse(value) 
+    value = Date.parse(value)
   end
   var_ = instance_variable_get "@recent_#{klass.classify.down_under}"
-  eval("var_.reload.#{field_}").should == value
+  eval("var_.reload.#{field_}").to_s.should == value
 end
 
 When /^that ([^\"]*) is destroyed$/ do |klass|
