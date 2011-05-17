@@ -67,7 +67,7 @@ When /^I press "([^\"]*)"$/ do |button|
   end
 end
 
-Then /^I should see a button labelled "([^\"]*)"$/ do |button_label|
+Then /^I should see a button (with text|labelled) "([^\"]*)"$/ do |x, button_label|
   $browser.button(:value, button_label).html
 end
 
